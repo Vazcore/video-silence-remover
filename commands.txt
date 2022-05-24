@@ -1,0 +1,4 @@
+.\ffmpeg.exe -i input.mp3 -af "silencedetect=n=-35dB:d=0.05" output.mp3
+
+
+.\ffmpeg.exe -i test.mp4 -vf "select='between(t,4,7)+between(t,10,15)',setpts=N/FRAME_RATE/TB" -af "aselect='between(t,4,7)+between(t,10,15)',asetpts=N/SR/TB" output.mp4

@@ -1,0 +1,26 @@
+{
+  "name": "video-silence-remover",
+  "version": "0.0.1",
+  "description": "Remove silences from the video",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js --input=test.mp4 --dB=35 --output=output.mp4"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Vazcore/video-silence-remover.git"
+  },
+  "keywords": [
+    "silence",
+    "video"
+  ],
+  "author": "Oleksii Habrusiev",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Vazcore/video-silence-remover/issues"
+  },
+  "homepage": "https://github.com/Vazcore/video-silence-remover#readme",
+  "dependencies": {
+    "yargs": "^17.5.1"
+  }
+}
