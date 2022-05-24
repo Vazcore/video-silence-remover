@@ -5,7 +5,10 @@ const path = require("path");
 
 const deleteFile = (fPath) => {
   try {
-    fs.unlinkSync(fPath);
+    if (fs.existsSync(fPath)) {
+      console.log(`Deleting: ${fPath}`);
+      fs.unlinkSync(fPath);
+    }
   } catch (error) {
     console.error(error);
   }
@@ -41,10 +44,40 @@ const execute = (command) => {
     }
   });
 
-  res.stdout.on("end", () => {
-    console.log("End");
-    console.log(intervals);
+  const promisedResult = new Promise((resolve) => {
+    res.stdout.on("end", () => {
+      resolve(intervals);
+    });
   });
+
+  return promisedResult;
 };
 
-execute(`ffmpeg -i ${input} -af "silencedetect=n=-${dB}dB:d=0.05" ${output}`);
+const createVoiceIntervalsCommand = (silences) => {
+  let command = "";
+  for (let i = 0; i < silences.length; i++) {
+    if (i === 0) {
+      command += `between(t,${silences[i].end},`;
+    } else if (i === silences.length - 1) {
+      command += `${silences[i].start})`;
+    } else {
+      command += `${silences[i].start})+between(t,${silences[i].end},`;
+    }
+  }
+
+
+  return command;
+};
+
+const start = async () => {
+  const silenceIntervals = await execute(`ffmpeg -i ${input} -af "silencedetect=n=-${dB}dB:d=0.2" temp.mp4`);    
+  const voiceIntervalsCommand = createVoiceIntervalsCommand(silenceIntervals);
+
+  await execute(
+    `ffmpeg -i ${input} -vf "select='${voiceIntervalsCommand}',setpts=N/FRAME_RATE/TB" ` +
+    `-af "aselect='${voiceIntervalsCommand}',asetpts=N/SR/TB" ${output}`
+  );
+  deleteFile("temp.mp4");
+};
+
+start();
