@@ -4,7 +4,7 @@
   "description": "Remove silences from the video",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js --input=test.mp4 --dB=35 --output=output.mp4"
+    "start": "node index.js --input=input.mp4 --dB=35 --output=output.mp4"
   },
   "repository": {
     "type": "git",
