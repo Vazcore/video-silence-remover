@@ -1,6 +1,10 @@
 const yargs = require("yargs");
 const fs = require("fs");
 const { exec } = require("child_process");
+const path = require("path");
+
+const videoFilterPath = path.normalize("vf.txt");
+const audioFilterPath = path.normalize("af.txt");
 
 const getArg = (args, arg) => {
   const argument = args[arg];
@@ -26,6 +30,7 @@ const deleteFile = (fPath) => {
 const input = getArg(yargs.argv, "input");
 const dB = getArg(yargs.argv, "dB");
 const output = getArg(yargs.argv, "output");
+const duration = getArg(yargs.argv, "duration");
 
 deleteFile(output);
 deleteFile("temp.mp3");
@@ -37,7 +42,6 @@ const execution = (command) => {
   
   const promise = new Promise((resolve) => {
     process.stdout.on("end", () => {
-      console.log("End!");
       resolve(result);
     });
   });
@@ -78,15 +82,28 @@ const getVoiceIntervals = (consoleData) => {
   return command;
 };
 
+const writeToFile = (filepath, data) => {
+  try {
+    const fPath = path.normalize(filepath);
+    fs.writeFileSync(fPath, data, { encoding: "utf8" });
+  } catch (error) {    
+    console.log(`Error writting to ${filepath}`);
+    console.log(error);
+  }  
+}
+
 const start = async () => {
-  const consoleData = await execution(`ffmpeg -i ${input} -af "silencedetect=n=-${dB}dB:d=0.05" temp.mp3`);
+  const consoleData = await execution(`ffmpeg -i ${input} -af "silencedetect=n=-${dB}dB:d=${duration}" temp.mp3`);
   const voiceIntervals = getVoiceIntervals(consoleData);
-  console.log(voiceIntervals);
+  writeToFile(videoFilterPath, `select='${voiceIntervals}',setpts=N/FRAME_RATE/TB`);
+  writeToFile(audioFilterPath, `aselect='${voiceIntervals}',asetpts=N/SR/TB`);
+
   await execution(
-    `ffmpeg -i ${input} -vf "select='${voiceIntervals}', setpts=N/FRAME_RATE/TB" ` +
-    `-af "aselect='${voiceIntervals}',asetpts=N/SR/TB" ${output}`
+    `ffmpeg -i ${input} -filter_script:v ${videoFilterPath} -filter_script:a ${audioFilterPath} ${output}`
   );
-  deleteFile("temp.mp3");  
+  deleteFile("temp.mp3");
+  deleteFile(videoFilterPath);
+  deleteFile(audioFilterPath);
 };
 
 start();
