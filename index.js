@@ -1,83 +1,92 @@
 const yargs = require("yargs");
-const { exec } = require("child_process");
 const fs = require("fs");
-const path = require("path");
+const { exec } = require("child_process");
+
+const getArg = (args, arg) => {
+  const argument = args[arg];
+
+  if (!argument) {
+    throw new Error(`Argument "${arg}" is missing!`);
+  }
+
+  return argument;
+};
 
 const deleteFile = (fPath) => {
   try {
     if (fs.existsSync(fPath)) {
-      console.log(`Deleting: ${fPath}`);
+      console.log(`Deleting: ${fPath}`)
       fs.unlinkSync(fPath);
     }
   } catch (error) {
-    console.error(error);
+    
   }
 };
 
-const getArg = (args, arg) => {
-  if (!args[arg]) {
-    throw new Error(`Missing argument: ${arg} !`);
-  }
-
-  return args[arg];
-};
-
-const input = path.normalize(getArg(yargs.argv, "input"));
+const input = getArg(yargs.argv, "input");
 const dB = getArg(yargs.argv, "dB");
-const output = path.normalize(getArg(yargs.argv, "output"));
+const output = getArg(yargs.argv, "output");
 
 deleteFile(output);
+deleteFile("temp.mp3");
 
-const execute = (command) => {
-  const intervals = [];
-  const res = exec(command, {stdio: 'inherit', encoding: "utf8"});
+const execution = (command) => {
+  let result = "";
+  const process = exec(command);
+  process.stderr.on("data", data => result += data);
   
-  res.stderr.on("data", (data) => {
-    if (data.includes("silence_start:")) {
-      const interval = { start: data.split("silence_start:")[1].split("\r")[0].trim() };
-      intervals.push(interval);
-    }
-
-    if (data.includes("silence_end:")) {
-      const lastInterval = intervals[intervals.length - 1];
-      lastInterval.end = data.split("silence_end:")[1].split("|")[0].trim();
-    }
-  });
-
-  const promisedResult = new Promise((resolve) => {
-    res.stdout.on("end", () => {
-      resolve(intervals);
+  const promise = new Promise((resolve) => {
+    process.stdout.on("end", () => {
+      console.log("End!");
+      resolve(result);
     });
   });
 
-  return promisedResult;
+  return promise;
 };
 
-const createVoiceIntervalsCommand = (silences) => {
+const getVoiceIntervals = (consoleData) => {
   let command = "";
-  for (let i = 0; i < silences.length; i++) {
-    if (i === 0) {
-      command += `between(t,${silences[i].end},`;
-    } else if (i === silences.length - 1) {
-      command += `${silences[i].start})`;
-    } else {
-      command += `${silences[i].start})+between(t,${silences[i].end},`;
+  let isBetweenFinished = true;
+
+  consoleData
+  .split("\n")
+  .filter(str => str.includes("silencedetect"))
+  .map(line => {
+    if (line.includes("silence_start:")) {
+      return line.split("silence_start:")[1].split("\r")[0].trim()
     }
-  }
-
-
+    if (line.includes("silence_end:")) {
+      return line.split("silence_end:")[1].split("|")[0].trim()
+    }
+  })
+  .forEach((element, index, array) => {      
+    if (index !== 0 && index !== array.length - 1) {
+      if (isBetweenFinished) {
+        command += `between(t,${element},`;
+        isBetweenFinished = false;
+      } else {
+        command += `${element})`;
+        if (index !== array.length - 2) {
+          command += "+";
+        }
+        isBetweenFinished = true;
+      }
+    }
+  })
+  
   return command;
 };
 
 const start = async () => {
-  const silenceIntervals = await execute(`ffmpeg -i ${input} -af "silencedetect=n=-${dB}dB:d=0.2" temp.mp4`);    
-  const voiceIntervalsCommand = createVoiceIntervalsCommand(silenceIntervals);
-
-  await execute(
-    `ffmpeg -i ${input} -vf "select='${voiceIntervalsCommand}',setpts=N/FRAME_RATE/TB" ` +
-    `-af "aselect='${voiceIntervalsCommand}',asetpts=N/SR/TB" ${output}`
+  const consoleData = await execution(`ffmpeg -i ${input} -af "silencedetect=n=-${dB}dB:d=0.05" temp.mp3`);
+  const voiceIntervals = getVoiceIntervals(consoleData);
+  console.log(voiceIntervals);
+  await execution(
+    `ffmpeg -i ${input} -vf "select='${voiceIntervals}', setpts=N/FRAME_RATE/TB" ` +
+    `-af "aselect='${voiceIntervals}',asetpts=N/SR/TB" ${output}`
   );
-  deleteFile("temp.mp4");
+  deleteFile("temp.mp3");  
 };
 
 start();
